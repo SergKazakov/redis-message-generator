@@ -2,11 +2,11 @@
   "name": "redis-pub-sub",
   "private": true,
   "scripts": {
-    "test": "eslint --ignore-path .gitignore --fix .",
+    "test": "eslint --ignore-path .gitignore --fix **/*.mjs",
     "precommit": "lint-staged"
   },
   "lint-staged": {
-    "*.js": [
+    "*.mjs": [
       "npm t",
       "git add -A"
     ]
