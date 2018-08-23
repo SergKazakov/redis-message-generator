@@ -1,6 +1,7 @@
 #!/usr/bin/env node --experimental-modules
 import yargs from "yargs"
 import Redis from "ioredis"
+import randomize from "randomatic"
 
 const { redisUrl, getErrors } = yargs
   .usage("Usage: $0")
@@ -19,53 +20,75 @@ const MESSAGES_KEY = "messages"
 
 const ERRORS_KEY = "errors"
 
-const PROCESS_ID = process.pid
+class App {
+  constructor({ redisClient, pid }) {
+    this.redisClient = redisClient
 
-const master = async ({ redisClient, pid, isFirstCall = false }) => {
-  const currentMaster = await redisClient.get(MASTER_KEY)
-
-  if (currentMaster === null || Number(currentMaster) !== pid) {
-    return
+    this.pid = pid
   }
 
-  if (isFirstCall) {
-    console.log(`Master ${pid} is sending messages`)
-  }
-
-  const message = Math.random()
-
-  await redisClient.rpush(MESSAGES_KEY, message)
-
-  console.log("send", message)
-
-  setTimeout(master, 500, { redisClient, pid })
-}
-
-const slave = async ({ redisClient, pid, isFirstCall = false }) => {
-  const currentMaster = await redisClient.get(MASTER_KEY)
-
-  if (currentMaster === null || Number(currentMaster) === pid) {
-    return
-  }
-
-  if (isFirstCall) {
-    console.log(`Slave ${pid} is getting messages`)
-  }
-
-  const message = await redisClient.rpop(MESSAGES_KEY)
-
-  if (message) {
-    console.log("get", message)
-
-    if (Math.random() < 0.05) {
-      await redisClient.rpush(ERRORS_KEY, message)
-
-      console.log(`Error ${message} was found`)
+  async chooseRole() {
+    if (
+      (await this.redisClient.set(MASTER_KEY, this.pid, "EX", 10, "NX")) ===
+      "OK"
+    ) {
+      return this.beMaster()
     }
+
+    return this.beSlave()
   }
 
-  setTimeout(slave, 500, { redisClient, pid })
+  async beMaster() {
+    const currentMaster = await this.redisClient.get(MASTER_KEY)
+
+    if (currentMaster === null || Number(currentMaster) !== this.pid) {
+      return
+    }
+
+    if (this.role !== "master") {
+      console.log(`Master ${this.pid} is sending messages`)
+
+      this.role = "master"
+    }
+
+    const message = randomize("*", 10)
+
+    await this.redisClient.rpush(MESSAGES_KEY, message)
+
+    console.log("send", message)
+
+    setTimeout(() => this.beMaster(), 500)
+  }
+
+  async beSlave() {
+    const currentMaster = await this.redisClient.get(MASTER_KEY)
+
+    if (currentMaster === null || Number(currentMaster) === this.pid) {
+      return
+    }
+
+    if (this.role !== "slave") {
+      console.log(`Slave ${this.pid} is getting messages`)
+
+      this.role = "slave"
+    }
+
+    const message = await this.redisClient.rpop(MESSAGES_KEY)
+
+    if (message) {
+      console.log("get", message)
+
+      if (Math.random() < 0.05) {
+        await this.redisClient.rpush(ERRORS_KEY, message)
+
+        console.log(`Error ${message} was found`)
+      }
+    }
+
+    setTimeout(() => this.beSlave(), 500)
+  }
 }
+
 ;(async () => {
   const redis = new Redis(redisUrl)
 
@@ -85,37 +108,27 @@ const slave = async ({ redisClient, pid, isFirstCall = false }) => {
     return process.exit(0)
   }
 
+  const app = new App({ redisClient: redis, pid: process.pid })
+
   redis.on("ready", () => redis.config("SET", "notify-keyspace-events", "KEA"))
 
   const expirationListener = new Redis(redisUrl)
 
   expirationListener.subscribe("__keyevent@0__:expired")
 
-  expirationListener.on("message", async () => {
+  expirationListener.on("message", async (_, message) => {
     try {
-      console.log("Master has been expired")
-
-      if ((await redis.set(MASTER_KEY, PROCESS_ID, "EX", 10, "NX")) === "OK") {
-        return master({
-          redisClient: redis,
-          pid: PROCESS_ID,
-          isFirstCall: true,
-        })
+      if (message !== MASTER_KEY) {
+        return
       }
 
-      await slave({ redisClient: redis, pid: PROCESS_ID, isFirstCall: true })
+      console.log("Master has been expired")
+
+      await app.chooseRole()
     } catch (err) {
       console.log(err)
     }
   })
 
-  if ((await redis.set(MASTER_KEY, PROCESS_ID, "EX", 10, "NX")) === "OK") {
-    return master({
-      redisClient: redis,
-      pid: PROCESS_ID,
-      isFirstCall: true,
-    })
-  }
-
-  await slave({ redisClient: redis, pid: PROCESS_ID, isFirstCall: true })
+  await app.chooseRole()
 })().catch(console.log)
