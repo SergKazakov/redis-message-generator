@@ -1,44 +1,6 @@
 {
-  "name": "redis-pub-sub",
   "private": true,
-  "scripts": {
-    "test": "eslint --ignore-path .gitignore --fix **/*.mjs",
-    "precommit": "lint-staged"
-  },
-  "lint-staged": {
-    "*.mjs": [
-      "npm t",
-      "git add -A"
-    ]
-  },
-  "eslintConfig": {
-    "root": true,
-    "plugins": [
-      "unicorn"
-    ],
-    "extends": [
-      "xo/esnext",
-      "plugin:unicorn/recommended",
-      "plugin:prettier/recommended"
-    ]
-  },
-  "prettier": {
-    "trailingComma": "all",
-    "semi": false
-  },
-  "devDependencies": {
-    "eslint": "^5.4.0",
-    "eslint-config-prettier": "^3.0.1",
-    "eslint-config-xo": "^0.24.1",
-    "eslint-plugin-prettier": "^2.6.2",
-    "eslint-plugin-unicorn": "^5.0.0",
-    "husky": "^0.14.3",
-    "lint-staged": "^7.2.2",
-    "prettier": "^1.14.2"
-  },
   "dependencies": {
-    "ioredis": "^4.0.0",
-    "randomatic": "^3.1.0",
-    "yargs": "^12.0.1"
+    "ioredis": "^5.3.2"
   }
 }
