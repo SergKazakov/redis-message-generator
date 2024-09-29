@@ -18,7 +18,7 @@ const redis = new Redis(redisUrl)
 const ERRORS_KEY = "errors"
 
 if (getErrors) {
-  const [[, errors]] = await redis
+  const response = await redis
     .multi()
     .lrange(ERRORS_KEY, 0, -1)
     .del(ERRORS_KEY)
@@ -26,10 +26,14 @@ if (getErrors) {
 
   await redis.quit()
 
-  if (errors.length === 0) {
-    console.log("Errors are not found")
-  } else {
-    for (const error of errors) console.log(error)
+  if (response) {
+    const [[, errors]] = response
+
+    if (Array.isArray(errors)) {
+      for (const error of errors) console.log(error)
+    } else {
+      console.log("Errors are not found")
+    }
   }
 
   process.exit(0)
@@ -39,9 +43,9 @@ const MASTER_KEY = "master"
 
 const MESSAGES_KEY = "messages"
 
-let role
+let role: string
 
-let timeout
+let timeout: ReturnType<typeof setTimeout>
 
 const beMaster = async () => {
   if (role !== "master") {
